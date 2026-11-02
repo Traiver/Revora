@@ -17,7 +17,7 @@ public sealed class NetworkService : IDisposable
     public NetworkService(HttpMessageHandler? handler = null)
     {
         client = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(45) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Revora/0.1.0-beta");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Revora/0.2.0-beta");
     }
     private async Task<HttpResponseMessage> SendAsync(string url, HttpMethod method, CancellationToken token)
     {

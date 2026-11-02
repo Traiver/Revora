@@ -44,7 +44,7 @@ public sealed partial class MainController : IDisposable
     private bool TrayEnabled => startupEnabled || (backgroundRequested && startupFailureDetails.Length > 0);
     public MainController(bool background, SourceStore? sourceStore = null, StartupService? startupService = null, ICommandRunner? commandRunner = null, Action<string, string>? notificationSink = null, NotificationSettingsStore? notificationStore = null)
     {
-        backgroundRequested = background;
+        backgroundRequested = background; selfUpdatesEnabled = commandRunner == null;
         store = sourceStore ?? new SourceStore(Program.DataPath("quellen.json")); startup = startupService ?? new StartupService(); runner = commandRunner ?? new WingetRunner();
         notificationSettings = notificationStore ?? new NotificationSettingsStore(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(store.FilePath))!, "hinweise.json"));
         mutedPrograms = notificationSettings.Load();
@@ -52,12 +52,12 @@ public sealed partial class MainController : IDisposable
         try { startup.MigrateLegacy(); startupEnabled = startup.Enabled; }
         catch (Exception ex) { startupFailureDetails = ex.ToString(); startupEnabled = false; }
         Window = Ui.Load("MainWindow.xaml");
-        tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? (System.Drawing.Icon)System.Drawing.SystemIcons.Information.Clone(), Text = "Revora 0.1.0 Beta", Visible = TrayEnabled };
+        tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? (System.Drawing.Icon)System.Drawing.SystemIcons.Information.Clone(), Text = "Revora 0.2.0 Beta", Visible = TrayEnabled };
         notify = notificationSink ?? ((title, message) => tray.ShowBalloonTip(10000, title, message, Forms.ToolTipIcon.Info));
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Revora öffnen", null, (_, _) => Window.Dispatcher.Invoke(OpenWindow));
-        menu.Items.Add("Nach Updates suchen", null, async (_, _) => await SafeAsync(() => ScanAsync()));
-        menu.Items.Add("Beenden", null, (_, _) => { if (installing) { Error("Bitte warte, bis die laufende Installation fertig ist."); return; } exiting = true; Window.Close(); });
+        menu.Items.Add("Nach Updates suchen", null, async (_, _) => await SafeAsync(ScanAllAsync));
+        menu.Items.Add("Beenden", null, (_, _) => { if (installing || preparing) { Error("Bitte warte, bis die laufende Installation fertig ist."); return; } exiting = true; Window.Close(); });
         tray.ContextMenuStrip = menu;
         tray.DoubleClick += (_, _) => OpenWindow();
         tray.BalloonTipClicked += (_, _) => OpenWindow();
@@ -70,7 +70,9 @@ public sealed partial class MainController : IDisposable
             UpdateStartup();
         }
         option.Checked += ToggleStartup; option.Unchecked += ToggleStartup;
-        CheckButton.Click += async (_, _) => await SafeAsync(() => ScanAsync());
+        Window.C<Button>("SelfCheckButton").Click += async (_, _) => await CheckSelfUpdateAsync();
+        Window.C<Button>("SelfInstallButton").Click += async (_, _) => await SafeAsync(InstallSelfUpdateAsync);
+        CheckButton.Click += async (_, _) => await SafeAsync(ScanAllAsync);
         InstallButton.Click += async (_, _) => await SafeAsync(InstallSelectedAsync);
         Window.C<Button>("AddSource").Click += async (_, _) => await SafeAsync(() => EditSourceAsync(""));
         Window.C<TextBox>("SearchBox").TextChanged += (_, _) => Filter();
@@ -81,12 +83,13 @@ public sealed partial class MainController : IDisposable
         Window.Closing += (_, e) =>
         {
             if (exiting) return;
+            if (preparing) { e.Cancel = true; Error("Bitte warte, bis die Vorbereitung abgeschlossen ist."); return; }
             if (startupEnabled) { e.Cancel = true; Window.Hide(); }
             else if (installing) { e.Cancel = true; Error("Es wird gerade ein Programm installiert. Bitte warte, bis es fertig ist. Das Fenster bleibt so lange geöffnet."); }
         };
         Window.ContentRendered += async (_, _) => await FirstRenderAsync(background);
         timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-        timer.Tick += async (_, _) => { if (hasScanned && !Busy && DateTime.UtcNow - scanAttempt >= TimeSpan.FromHours(IntervalHours)) await SafeAsync(() => ScanAsync()); };
+        timer.Tick += async (_, _) => { if (hasScanned && !Busy && DateTime.UtcNow - scanAttempt >= TimeSpan.FromHours(IntervalHours)) await SafeAsync(ScanAllAsync); };
         timer.Start(); UpdateStartup(); UpdateActions();
     }
     internal Task StartAsync()
@@ -110,7 +113,7 @@ public sealed partial class MainController : IDisposable
         if (initialRender || disposed) return;
         initialRender = true;
         if (background && startupEnabled) Window.Hide();
-        await SafeAsync(() => ScanAsync());
+        await SafeAsync(ScanAllAsync);
     }
     private async Task SafeAsync(Func<Task> action) { try { await action(); } catch (OperationCanceledException) { if (!disposed) { Status.Text = "Vorgang abgebrochen"; Summary.Text = "Die Suche oder Vorbereitung wurde beendet. Es wird kein weiteres Programm installiert."; } } catch (Exception ex) { if (!disposed) { Status.Text = "Vorgang nicht abgeschlossen"; Summary.Text = UserText.Explain(ex); Error(ex); } } }
     private void Error(string message)
@@ -132,6 +135,7 @@ public sealed partial class MainController : IDisposable
     }
     private void UpdateActions()
     {
+        Window.C<Button>("SelfInstallButton").IsEnabled = !Busy; Window.C<Button>("SelfCheckButton").IsEnabled = !Busy && !checkingSelfUpdate;
         CheckButton.IsEnabled = !Busy; List.IsEnabled = !Busy && scanValid;
         foreach (var name in new[] { "AddSource", "SelectVisible", "ClearSelection", "OnlyUpdates", "SearchBox" }) Window.C<Control>(name).IsEnabled = !Busy && hasScanned && scanValid;
         int count = programs.Count(x => x.Selected), hidden = count - visible.Count(x => x.Selected);
@@ -218,5 +222,5 @@ public sealed partial class MainController : IDisposable
         dialog.C<Button>("BrowseLocation").Click += (_, _) => { using var picker = new Forms.FolderBrowserDialog { Description = "Programmordner selbst auswählen", UseDescriptionForTitle = true, ShowNewFolderButton = false }; if (picker.ShowDialog() == Forms.DialogResult.OK) Open(picker.SelectedPath); };
         dialog.C<Button>("CancelLocation").Click += (_, _) => dialog.Close(); dialog.ShowDialog();
     }
-    public void Dispose() { if (disposed) return; disposed = true; timer.Stop(); scanCancellation?.Cancel(); tray.Visible = false; var trayIcon = tray.Icon; tray.Dispose(); trayIcon?.Dispose(); network.Dispose(); }
+    public void Dispose() { if (disposed) return; disposed = true; timer.Stop(); scanCancellation?.Cancel(); tray.Visible = false; var trayIcon = tray.Icon; tray.Dispose(); trayIcon?.Dispose(); network.Dispose(); selfUpdater.Dispose(); }
 }

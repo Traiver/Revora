@@ -75,6 +75,7 @@ public static class SelfTests
             var execution = manifest.Descendants().Single(node => node.Name.LocalName == "requestedExecutionLevel");
             Check((string?)execution.Attribute("level") == "requireAdministrator" && (string?)execution.Attribute("uiAccess") == "false", "Packaged EXE does not request administrator privileges");
             passed.Add("Native Windows EXE manifest requires administrator approval without UIAccess");
+            SelfUpdateTests.Run(root, passed);
             var store = new SourceStore(Path.Combine(root, "sources.json"));
             File.WriteAllText(store.FilePath, "[{\"Name\":\"Legacy\",\"Url\":\"https://example.org/a.exe\",\"InstalledVersion\":\"1.0\"}]");
             var before = File.ReadAllText(store.FilePath); var sources = store.Load(); Check(sources.Count == 1 && sources[0].Key.StartsWith("manual:") && before == File.ReadAllText(store.FilePath), "Legacy config changed on read");
@@ -188,8 +189,9 @@ public static class SelfTests
                 recovery.Window.Close();
             }
             passed.Add("Unavailable startup backend leaves scans working; background recovery stays hidden and can notify");
-            var main = Ui.Load("MainWindow.xaml"); Check(main.Icon != null && main.Title == "Revora · 0.1.0 Beta", "Revora branding missing"); var list = main.C<ListBox>("ProgramsList"); Check(list.Items.Count == 0 && main.C<Border>("ProgramsCard").Visibility == Visibility.Collapsed && main.C<CheckBox>("StartupOption").IsChecked != true, "UI not scan-first/opt-in");
+            var main = Ui.Load("MainWindow.xaml"); Check(main.Icon != null && main.Title == "Revora · 0.2.0 Beta", "Revora branding missing"); var list = main.C<ListBox>("ProgramsList"); Check(list.Items.Count == 0 && main.C<Border>("ProgramsCard").Visibility == Visibility.Collapsed && main.C<CheckBox>("StartupOption").IsChecked != true, "UI not scan-first/opt-in");
             main.C<Border>("ProgramsCard").Visibility = Visibility.Visible; list.ItemsSource = scan.Programs; int clicks = 0; string key = "";
+            main.C<Border>("SelfUpdateCard").Visibility = Visibility.Visible; main.C<TextBlock>("SelfUpdateTitle").Text = "Revora 0.3.0 Beta ist verfügbar";
             Ui.RouteRowButtons(main, button => { clicks++; key = Convert.ToString(button.Tag) ?? ""; });
             foreach (var width in new[] { 504, 520, 640, 900, 1200 }) Render(main, width, 850);
             main.C<Border>("ActionBar").Visibility = Visibility.Visible;

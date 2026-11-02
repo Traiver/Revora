@@ -43,6 +43,7 @@ public static class Program
             using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
             if (!new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
                 throw new UserMessageException("Revora benötigt Administratorrechte. Öffne Revora.exe und bestätige die Windows-Abfrage, um fortzufahren.");
+            if (args.Length == 6 && args[0] == "--apply-self-update") return SelfUpdateService.Apply(args);
             using var mutex = new Mutex(false, LegacyCompatibility.InstanceMutexName);
             if (!mutex.WaitOne(0)) { if (!background) MessageBox.Show("Der Updater ist bereits geöffnet. Klicke auf sein Symbol in der Taskleiste. Wenn er im Hintergrund läuft, öffnest du ihn über das kleine Symbol neben der Windows-Uhr.", "Revora"); return 0; }
             try
@@ -51,6 +52,12 @@ public static class Program
                 app.DispatcherUnhandledException += (_, e) => { if (app.MainWindow != null && !app.MainWindow.IsVisible) LogBackgroundError(e.Exception); else if (app.MainWindow?.IsLoaded == true) Ui.Message(app.MainWindow, UserText.Explain(e.Exception), e.Exception.ToString(), "Vorgang nicht abgeschlossen"); else if (background) LogBackgroundError(e.Exception); else MessageBox.Show(UserText.Explain(e.Exception), "Revora", MessageBoxButton.OK, MessageBoxImage.Error); e.Handled = true; };
                 using var controller = new MainController(background);
                 app.MainWindow = controller.Window;
+                if (args.Length == 2 && args[0] == "--self-update-ready")
+                {
+                    string ready = Path.GetFullPath(args[1]);
+                    string updates = Path.GetFullPath(DataPath("SelfUpdate")) + Path.DirectorySeparatorChar;
+                    if (ready.StartsWith(updates, StringComparison.OrdinalIgnoreCase) && Path.GetFileName(ready) == "ready" && Directory.Exists(Path.GetDirectoryName(ready))) File.WriteAllText(ready, "0.2.0-beta");
+                }
                 app.Dispatcher.BeginInvoke(new Action(async () => await controller.StartAsync()));
                 return app.Run();
             }
