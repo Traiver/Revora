@@ -1,0 +1,17 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Download auswählen" Width="640" Height="680" MinWidth="480" MinHeight="450" WindowStartupLocation="CenterOwner" Background="#101E2D" Foreground="#E8F5FF" FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True">
+ <Window.Resources><ResourceDictionary Source="Theme.xaml"/></Window.Resources>
+ <Grid Margin="22" Background="#101E2D"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+ <ScrollViewer Padding="0,0,10,0"><StackPanel>
+ <TextBlock Text="Download auswählen" FontSize="22" FontWeight="SemiBold"/>
+ <TextBlock x:Name="PackageText" FontWeight="SemiBold" Margin="0,12,0,8"/>
+ <TextBlock Text="Mehrere Versionen sind installiert. Wähle den passenden Download. Revora entfernt keine alte Version; der Installer kann ein Update oder eine Reparatur anbieten." Style="{StaticResource MutedText}"/>
+ <TextBlock Text="Wähle die gleiche 32- oder 64-Bit-Ausgabe wie beim installierten Programm." Style="{StaticResource MutedText}" Margin="0,10,0,0"/><TextBlock x:Name="ChoiceStatus" Text="Verfügbare Downloads werden gesucht …" Foreground="#9ECCE9" Margin="0,18,0,12"/>
+ <ListBox x:Name="DownloadChoices" MaxHeight="420" AutomationProperties.Name="Verfügbare Downloadquellen"><ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="{Binding Detail}" Foreground="#A3BAD6" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></DataTemplate></ListBox.ItemTemplate></ListBox>
+ <Expander Header="Eigenen Downloadlink verwenden" Margin="0,16,0,0"><StackPanel>
+ <TextBox x:Name="CustomDownload" MinHeight="44" MaxHeight="100" AutomationProperties.Name="Eigener Downloadlink"/>
+ <TextBlock Text="Direkter https://-Link zur .exe- oder .msi-Datei. Gilt nur für diese Installation und ersetzt die Auswahl oben." Style="{StaticResource MutedText}" FontSize="11" Margin="0,6,0,0"/>
+ </StackPanel></Expander><Expander Header="Details zur Suche" Margin="0,14,0,0"><TextBox x:Name="LookupReport" IsReadOnly="True" MaxHeight="200" FontFamily="Consolas" FontSize="11"/></Expander>
+ </StackPanel></ScrollViewer>
+ <WrapPanel Grid.Row="1" HorizontalAlignment="Right" Margin="0,18,0,0"><Button x:Name="CancelDownloadChoice" Content="Abbrechen" IsCancel="True" Margin="0,0,10,0"/><Button x:Name="UseDownloadChoice" Content="Download übernehmen" Style="{StaticResource Primary}" IsEnabled="False"/></WrapPanel>
+ </Grid>
+</Window>

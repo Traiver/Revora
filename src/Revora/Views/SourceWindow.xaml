@@ -1,0 +1,28 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Quelle ändern" Width="640" Height="680" MinWidth="480" MinHeight="450" WindowStartupLocation="CenterOwner" Background="#101E2D" Foreground="#E8F5FF" FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True">
+ <Window.Resources><ResourceDictionary Source="Theme.xaml"/></Window.Resources>
+ <Grid Margin="22" Background="#101E2D"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <ScrollViewer Padding="0,0,10,0"><StackPanel>
+   <TextBlock x:Name="EditorTitle" Text="Updatequelle" FontSize="22" FontWeight="SemiBold"/>
+   <TextBlock x:Name="AssociationText" Style="{StaticResource MutedText}" Margin="0,8,0,20"/>
+   <StackPanel x:Name="SourceNameGroup"><TextBlock Text="Programmname" FontWeight="SemiBold" Margin="0,0,0,8"/><TextBox x:Name="NameField" AutomationProperties.Name="Programmname"/></StackPanel>
+   <RadioButton x:Name="DefaultMode" GroupName="SourceMode" Content="Automatisch finden" Foreground="#E8F5FF" Margin="0,20,0,10"/>
+   <TextBlock x:Name="DefaultHint" Style="{StaticResource MutedText}" FontSize="11" Margin="22,0,0,10"/>
+   <RadioButton x:Name="DownloadMode" GroupName="SourceMode" Content="Eigenen Downloadlink verwenden" Foreground="#E8F5FF" Margin="0,8,0,16"/>
+   <StackPanel x:Name="DownloadFields">
+    <TextBlock Text="Downloadlink" FontWeight="SemiBold" Margin="0,0,0,8"/><TextBox x:Name="UrlField" MinHeight="44" MaxHeight="100" AutomationProperties.Name="Downloadlink"/>
+    <TextBlock Text="Direkter https://-Link zur .exe- oder .msi-Datei auf der Website des Anbieters." Style="{StaticResource MutedText}" FontSize="11" Margin="0,5,0,0"/>
+    <StackPanel x:Name="SourceVersionGroup"><TextBlock Text="Installierte Version" FontWeight="SemiBold" Margin="0,18,0,8"/><TextBox x:Name="VersionField" AutomationProperties.Name="Installierte Version"/>
+    <TextBlock x:Name="VersionHint" Text="Diese Versionsnummer wurde auf deinem PC gefunden." Style="{StaticResource MutedText}" FontSize="11" Margin="0,5,0,0"/></StackPanel>
+    <Expander x:Name="AdvancedSourceOptions" Header="Weitere Angaben (optional)" Margin="0,16,0,0"><StackPanel>
+     <TextBlock Text="Link für die automatische Versionssuche" FontWeight="SemiBold" Margin="0,8,0,8"/><TextBox x:Name="FeedField" MinHeight="44" MaxHeight="100" AutomationProperties.Name="Link zu einer Versionsdatei"/>
+     <TextBlock Text="Nur ausfüllen, wenn dir der Anbieter eine spezielle Versionsdatei bereitstellt. Sie enthält Versionsnummer und Downloadlink. Ohne sie musst du selbst prüfen, ob dein eigener Downloadlink eine neuere Version liefert. Liefert die Datei den Downloadlink, darf das obere Linkfeld leer bleiben." Style="{StaticResource MutedText}" FontSize="11" Margin="0,5,0,0"/>
+     <TextBlock Text="Datei-Prüfcode des Anbieters" FontWeight="SemiBold" Margin="0,18,0,8"/><TextBox x:Name="HashField" MinHeight="44" MaxHeight="100" AutomationProperties.Name="Optionaler SHA256-Prüfcode"/>
+     <TextBlock Text="Nur eintragen, wenn der Anbieter einen SHA256-Code mit 64 Zeichen nennt. Damit prüft der Updater, ob genau die erwartete Datei geladen wurde. Liefert die Versionsdatei einen solchen Code, wird deren Wert verwendet." Style="{StaticResource MutedText}" FontSize="11" Margin="0,5,0,0"/>
+    </StackPanel></Expander>
+    <Button x:Name="TestSource" Content="Link prüfen" HorizontalAlignment="Left" Margin="0,20,0,0"/>
+   </StackPanel>
+   <TextBlock x:Name="ValidationText" Foreground="#EDBD91" Text="Prüfe den Link, bevor du ihn speicherst. Dabei wird noch nichts installiert." Margin="0,18,0,8"/>
+  </StackPanel></ScrollViewer>
+  <WrapPanel Grid.Row="1" HorizontalAlignment="Right" Margin="0,18,0,0"><Button x:Name="DeleteSource" Content="Eintrag entfernen" Visibility="Collapsed" Margin="0,0,10,0"/><Button x:Name="CancelSource" Content="Abbrechen" IsCancel="True" Margin="0,0,10,0"/><Button x:Name="SaveSource" Content="Speichern" Style="{StaticResource Primary}" IsEnabled="False"/></WrapPanel>
+ </Grid>
+</Window>
