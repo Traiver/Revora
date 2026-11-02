@@ -33,6 +33,7 @@ public sealed partial class MainController : IDisposable
     private bool startupEnabled, updatingStartup, hasScanned, scanValid, installing, preparing, exiting, disposed, initialRender;
     private DateTime scanFinished, scanAttempt;
     private string lastNotification = "";
+    private string startupFailureDetails = "";
     private const int IntervalHours = 4;
     private Button CheckButton => Window.C<Button>("CheckButton");
     private Button InstallButton => Window.C<Button>("InstallButton");
@@ -40,6 +41,7 @@ public sealed partial class MainController : IDisposable
     private TextBlock Summary => Window.C<TextBlock>("SummaryText");
     private ListBox List => Window.C<ListBox>("ProgramsList");
     private bool Busy => scanCancellation != null || installing || preparing;
+    private bool TrayEnabled => startupEnabled || (backgroundRequested && startupFailureDetails.Length > 0);
     public MainController(bool background, SourceStore? sourceStore = null, StartupService? startupService = null, ICommandRunner? commandRunner = null, Action<string, string>? notificationSink = null, NotificationSettingsStore? notificationStore = null)
     {
         backgroundRequested = background;
@@ -47,9 +49,10 @@ public sealed partial class MainController : IDisposable
         notificationSettings = notificationStore ?? new NotificationSettingsStore(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(store.FilePath))!, "hinweise.json"));
         mutedPrograms = notificationSettings.Load();
         sources = store.Load(); scanner = new Scanner(runner, network);
-        startup.MigrateLegacy(); startupEnabled = startup.Enabled;
+        try { startup.MigrateLegacy(); startupEnabled = startup.Enabled; }
+        catch (Exception ex) { startupFailureDetails = ex.ToString(); startupEnabled = false; }
         Window = Ui.Load("MainWindow.xaml");
-        tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? (System.Drawing.Icon)System.Drawing.SystemIcons.Information.Clone(), Text = "Revora 0.1.0 Beta", Visible = startupEnabled };
+        tray = new Forms.NotifyIcon { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? (System.Drawing.Icon)System.Drawing.SystemIcons.Information.Clone(), Text = "Revora 0.1.0 Beta", Visible = TrayEnabled };
         notify = notificationSink ?? ((title, message) => tray.ShowBalloonTip(10000, title, message, Forms.ToolTipIcon.Info));
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Revora öffnen", null, (_, _) => Window.Dispatcher.Invoke(OpenWindow));
@@ -88,7 +91,7 @@ public sealed partial class MainController : IDisposable
     }
     internal Task StartAsync()
     {
-        if (backgroundRequested && startupEnabled)
+        if (backgroundRequested && TrayEnabled)
         {
             // Never show the window on Windows login, even briefly.
             Window.ShowInTaskbar = false;
@@ -122,8 +125,9 @@ public sealed partial class MainController : IDisposable
     }
     private void UpdateStartup()
     {
-        tray.Visible = startupEnabled;
-        Window.C<TextBlock>("StartupHint").Text = startupEnabled ? "Startet beim Anmelden mit Administratorrechten im Hintergrund und meldet neue Updates." : "Ausgeschaltet. Revora startet nur, wenn du es öffnest.";
+        tray.Visible = TrayEnabled;
+        Window.C<CheckBox>("StartupOption").IsEnabled = startupFailureDetails.Length == 0;
+        Window.C<TextBlock>("StartupHint").Text = startupFailureDetails.Length > 0 ? "Der Windows-Start kann gerade nicht geprüft werden. Du kannst Revora trotzdem verwenden. Öffne Revora später erneut, um die Einstellung zu prüfen. Details stehen im Suchbericht." : startupEnabled ? "Startet beim Anmelden mit Administratorrechten im Hintergrund und meldet neue Updates." : "Ausgeschaltet. Revora startet nur, wenn du es öffnest.";
         Window.C<TextBlock>("FooterText").Text = startupEnabled ? "Schließen lässt Revora im Hintergrund weiterlaufen. Die Suche erfolgt alle 4 Stunden. Beenden: Rechtsklick auf das Symbol neben der Uhr → Beenden." : "Schließen beendet Revora. Solange das Fenster offen ist, wird nach der ersten Suche alle 4 Stunden erneut geprüft.";
     }
     private void UpdateActions()
@@ -176,12 +180,12 @@ public sealed partial class MainController : IDisposable
             if (disposed) return;
             programs = data.Programs; hasScanned = scanValid = true; scanFinished = DateTime.UtcNow;
             foreach (var p in programs) { p.NotificationsMuted = mutedPrograms.Contains(p.Key); p.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ProgramItem.Selected)) UpdateActions(); }; }
-            Window.C<TextBox>("DiagnosticReport").Text = data.Report;
+            Window.C<TextBox>("DiagnosticReport").Text = data.Report + (startupFailureDetails.Length > 0 ? "\n\nAutostart konnte nicht geprüft werden:\n" + startupFailureDetails : "");
             int count = programs.Count(x => x.HasUpdate && !x.NotificationsMuted); UpdateScanCount();
             Summary.Text = data.Error.Length == 0 ?  "Zuletzt geprüft um " + DateTime.Now.ToString("HH:mm") + ". Hake die Programme an, die du aktualisieren möchtest." : "Die Updatesuche war nicht vollständig. Du siehst die gefundenen Programme, aber möglicherweise fehlen Updates. Mehr dazu unter „Suchbericht“.";
             Window.C<Border>("ProgramsCard").Visibility = Visibility.Visible; Window.C<TextBlock>("HeroTitle").Text = "Deine Programme"; CheckButton.Content = "Erneut suchen"; CheckButton.Style = (Style)Window.FindResource(typeof(Button)); Filter();
             var signature = UpdateSignature();
-            if (startupEnabled && !Window.IsVisible && signature.Length > 0 && signature != lastNotification) notify("Revora · Updates verfügbar", $"{UserText.Count(count, "Updatehinweis", "Updatehinweise")}. Hier klicken, um die Programme auszuwählen.");
+            if (TrayEnabled && !Window.IsVisible && signature.Length > 0 && signature != lastNotification) notify("Revora · Updates verfügbar", $"{UserText.Count(count, "Updatehinweis", "Updatehinweise")}. Hier klicken, um die Programme auszuwählen.");
             lastNotification = signature;
         }
         finally { scanCancellation = null; if (!disposed) { Window.C<ProgressBar>("ScanProgress").Visibility = Visibility.Collapsed; UpdateActions(); } }

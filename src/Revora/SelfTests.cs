@@ -34,8 +34,9 @@ public static class SelfTests
     {
         public string? Xml { get; set; }
         public bool FailRegistration { get; set; }
+        public Exception? ReadFailure { get; set; }
         public int Registrations { get; private set; }
-        public string? ReadXml() => Xml;
+        public string? ReadXml() { if (ReadFailure != null) throw ReadFailure; return Xml; }
         public void Register(string xml) { if (FailRegistration) throw new IOException("Fixture registration failure"); Xml = xml; Registrations++; }
         public void Delete() => Xml = null;
     }
@@ -167,6 +168,26 @@ public static class SelfTests
             Reject(() => elevatedStartup.Set(true), "Foreign scheduled task overwritten"); Reject(() => elevatedStartup.Set(false), "Foreign scheduled task deleted");
             Check(tasks.Xml.Contains("--other-action"), "Foreign task changed"); tasks.Xml = null;
             passed.Add("Elevated interactive startup task preserves opt-in, migrates atomically, respects opt-out and protects foreign tasks");
+            Check(WindowsStartupTaskStore.ReadExistingTask(() => throw new FileNotFoundException("Task not found")) == null, "Managed missing-task exception escaped");
+            Check(WindowsStartupTaskStore.ReadExistingTask(() => throw new System.Runtime.InteropServices.COMException("Task not found", unchecked((int)0x80070002))) == null, "COM missing-task exception escaped");
+            Reject(() => WindowsStartupTaskStore.ReadExistingTask(() => throw new UnauthorizedAccessException("Fixture denial")), "Permission failure was treated as a missing task");
+            Reject(() => WindowsStartupTaskStore.ReadExistingTask(() => throw new System.Runtime.InteropServices.COMException("Account configuration failure", unchecked((int)0x8004130F))), "Task configuration failure was treated as a missing task");
+            Check(new WindowsStartupTaskStore("MissingSelfTest-" + Guid.NewGuid().ToString("N")).ReadXml() == null, "Real Windows lookup for an absent task failed");
+            passed.Add("Real missing Windows task and managed/COM not-found mappings return disabled; other errors remain distinguishable");
+            foreach (bool backgroundMode in new[] { false, true })
+            {
+                var unavailableTasks = new FakeStartupTasks { ReadFailure = new UnauthorizedAccessException("Fixture scheduler unavailable") };
+                var unavailableStartup = new StartupService(Path.Combine(root, "unavailable-startup-" + backgroundMode + ".lnk"), Path.Combine(root, "Revora.exe"), tasks: unavailableTasks, sid: taskSid);
+                var unavailableRunner = new FakeRunner { Run = _ => new CommandResult(0, Table(("Unavailable scheduler fixture", "Revora.UnavailableFixture", "1.0", "2.0"))) };
+                int recoveryNotices = 0;
+                using var recovery = new MainController(backgroundMode, new SourceStore(Path.Combine(root, "unavailable-profile-" + backgroundMode + ".json")), unavailableStartup, unavailableRunner, (_, _) => recoveryNotices++);
+                Check(!recovery.Window.C<CheckBox>("StartupOption").IsEnabled && recovery.Window.C<TextBlock>("StartupHint").Text.Contains("trotzdem verwenden"), "Unavailable startup backend blocks the app or lacks explanation");
+                AwaitUi(() => backgroundMode ? recovery.StartAsync() : recovery.FirstRenderAsync(false));
+                Check(unavailableRunner.Calls.Count == 1 && recovery.Window.C<ListBox>("ProgramsList").Items.Count == 1 && recovery.Window.C<TextBox>("DiagnosticReport").Text.Contains("Fixture scheduler unavailable"), "Autostart failure prevented scan or lost diagnostics");
+                Check(!recovery.Window.IsVisible && recoveryNotices == (backgroundMode ? 1 : 0) && unavailableTasks.Registrations == 0, "Autostart failure showed a foreground window or changed Windows settings");
+                recovery.Window.Close();
+            }
+            passed.Add("Unavailable startup backend leaves scans working; background recovery stays hidden and can notify");
             var main = Ui.Load("MainWindow.xaml"); Check(main.Icon != null && main.Title == "Revora · 0.1.0 Beta", "Revora branding missing"); var list = main.C<ListBox>("ProgramsList"); Check(list.Items.Count == 0 && main.C<Border>("ProgramsCard").Visibility == Visibility.Collapsed && main.C<CheckBox>("StartupOption").IsChecked != true, "UI not scan-first/opt-in");
             main.C<Border>("ProgramsCard").Visibility = Visibility.Visible; list.ItemsSource = scan.Programs; int clicks = 0; string key = "";
             Ui.RouteRowButtons(main, button => { clicks++; key = Convert.ToString(button.Tag) ?? ""; });

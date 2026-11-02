@@ -66,8 +66,15 @@ public sealed class WindowsStartupTaskStore : IStartupTaskStore
     }
     public string? ReadXml()
     {
-        try { dynamic task = Root().GetTask(Name); return (string)task.Xml; }
-        catch (COMException ex) when (ex.HResult == unchecked((int)0x80070002) || ex.HResult == unchecked((int)0x8004130F)) { return null; }
+        dynamic root = Root();
+        return ReadExistingTask(() => { dynamic task = root.GetTask(Name); return (string)task.Xml; });
+    }
+    internal static string? ReadExistingTask(Func<string> read)
+    {
+        try { return read(); }
+        // COM interop may translate ERROR_FILE_NOT_FOUND to FileNotFoundException.
+        // Match the missing-task HRESULT, not a particular managed exception type.
+        catch (Exception ex) when (ex.HResult == unchecked((int)0x80070002)) { return null; }
     }
     public void Register(string xml)
     {
