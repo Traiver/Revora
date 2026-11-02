@@ -118,7 +118,6 @@ public sealed class Scanner
             catch (Exception ex) { model.CanInstall = model.HasUpdate = false; model.Status = "Der Downloadlink konnte nicht geprüft werden. " + UserText.Explain(ex); model.SourceLabel = "Dein Downloadlink ist zurzeit nicht nutzbar."; model.StatusColor = "#EDBD91"; }
             programs.Add(model);
         }
-        report += $"\nSteam-Filter: {steamNames.Count} registrierte Steam-Titel werden ignoriert. Steam selbst bleibt enthalten.";
         return new ScanResult(programs.OrderByDescending(x => x.HasUpdate).ThenBy(x => x.Name).ToList(), report, error);
     }
     public static List<InstallPlan> Plan(IEnumerable<ProgramItem> programs)

@@ -37,7 +37,7 @@ public static class Program
                 using var network = new NetworkService();
                 var result = new Scanner(new WingetRunner(), network).ScanAsync(new SourceStore(DataPath("quellen.json")).Load(), CancellationToken.None).GetAwaiter().GetResult();
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-                File.WriteAllText(path, Json.Write(new { Programs = result.Programs.Count, Folders = result.Programs.Count(x => x.Installations.Any(i => i.Path.Length > 0)), Multiple = result.Programs.Count(x => x.InstallationsNotice.Length > 0), Selected = result.Programs.Count(x => x.Selected), result.Error, SteamFilter = result.Report.Split('\n').LastOrDefault(x => x.StartsWith("Steam-Filter:", StringComparison.Ordinal)) }));
+                File.WriteAllText(path, Json.Write(new { Programs = result.Programs.Count, Folders = result.Programs.Count(x => x.Installations.Any(i => i.Path.Length > 0)), Multiple = result.Programs.Count(x => x.InstallationsNotice.Length > 0), Selected = result.Programs.Count(x => x.Selected), result.Error }));
                 return result.Error.Length == 0 ? 0 : 1;
             }
             using var mutex = new Mutex(false, LegacyCompatibility.InstanceMutexName);
