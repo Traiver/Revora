@@ -38,6 +38,21 @@ internal static class SelfUpdateTests
     }
     internal static void Run(string root, List<string> passed)
     {
+        using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
+        {
+            if (new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
+            {
+                string secureRoot = Path.Combine(root, "protected-cache");
+                string folder = SelfUpdateService.CreateProtectedStage(secureRoot);
+                Check(Directory.Exists(folder), "Protected stage missing");
+                string unsafeRoot = Path.Combine(root, "unsafe-cache"); Directory.CreateDirectory(unsafeRoot);
+                var info = new DirectoryInfo(unsafeRoot); var security = System.IO.FileSystemAclExtensions.GetAccessControl(info);
+                security.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null), System.Security.AccessControl.FileSystemRights.Write, System.Security.AccessControl.AccessControlType.Allow));
+                System.IO.FileSystemAclExtensions.SetAccessControl(info, security);
+                Reject(() => SelfUpdateService.CreateProtectedStage(unsafeRoot));
+                passed.Add("Elevated updater creates an administrators-only cache and rejects writable existing caches");
+            }
+        }
         string digest = "sha256:" + new string('a', 64);
         Check(SelfUpdateService.Compare("v0.10.0-beta", "v0.2.0-beta") > 0 && SelfUpdateService.Compare("v0.2.0", "v0.2.0-beta") > 0, "Semantic self-update comparison failed");
         var http = new Http { Body = "[" + Release("v0.1.0-beta", digest) + "," + Release("v0.2.0-beta", digest) + "," + Release("v0.3.0-beta", digest) + "," + Release("v0.9.0-beta", digest, draft: true) + "]" };

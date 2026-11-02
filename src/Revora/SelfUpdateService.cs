@@ -5,6 +5,8 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -21,6 +23,29 @@ public sealed class SelfUpdateService : IDisposable
     public const string CurrentTag = "v0.2.0-beta";
     private const long MaxDownload = 250 * 1024 * 1024;
     private static readonly string[] RuntimeLicenses = { "NETCore-LICENSE.txt", "NETCore-THIRD-PARTY-NOTICES.txt", "WindowsDesktop-LICENSE.txt" };
+    internal static string CacheRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Revora Update Cache");
+    internal static string CreateProtectedStage(string? rootOverride = null)
+    {
+        string root = rootOverride ?? CacheRoot;
+        var admins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+        var security = new DirectorySecurity();
+        security.SetAccessRuleProtection(true, false); security.SetOwner(admins);
+        foreach (var sid in new[] { admins, system }) security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        var info = new DirectoryInfo(root);
+        if (!info.Exists) info.Create(security);
+        info.Refresh();
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Der Updateordner ist eine Verknüpfung. Bitte aktualisiere Revora manuell.");
+        var actual = info.GetAccessControl();
+        var owner = actual.GetOwner(typeof(SecurityIdentifier));
+        if (!admins.Equals(owner) && !system.Equals(owner)) throw new IOException("Der Updateordner ist nicht geschützt. Bitte aktualisiere Revora manuell.");
+        foreach (FileSystemAccessRule rule in actual.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+        {
+            const FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
+            if (rule.AccessControlType == AccessControlType.Allow && (rule.FileSystemRights & writes) != 0 && !admins.Equals(rule.IdentityReference) && !system.Equals(rule.IdentityReference)) throw new IOException("Der Updateordner erlaubt ungeschützte Änderungen. Bitte aktualisiere Revora manuell.");
+        }
+        string folder = Path.Combine(root, Guid.NewGuid().ToString("N")); new DirectoryInfo(folder).Create(security); return folder;
+    }
     private readonly HttpClient client;
     public SelfUpdateService(HttpMessageHandler? handler = null)
     {
@@ -153,8 +178,8 @@ public sealed class SelfUpdateService : IDisposable
     {
         string current = Environment.ProcessPath ?? "";
         if (!Path.GetFileName(current).Equals("Revora.exe", StringComparison.OrdinalIgnoreCase)) throw new UserMessageException("Öffne die fertige Revora.exe, um Revora zu aktualisieren.");
+        string folder = CreateProtectedStage();
         CleanupOldDownloads();
-        string folder = Program.DataPath(Path.Combine("SelfUpdate", Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(folder);
         string zip = Path.Combine(folder, "update.zip"), candidate = Path.Combine(folder, "Revora.new.exe");
         await DownloadAsync(release, zip, token); ExtractExecutable(zip, candidate); ValidateExecutable(candidate, release.Tag); ExtractLicenses(zip, folder);
         File.Delete(zip);
@@ -167,7 +192,7 @@ public sealed class SelfUpdateService : IDisposable
     }
     private static void CleanupOldDownloads()
     {
-        string root = Program.DataPath("SelfUpdate");
+        string root = CacheRoot;
         if (!Directory.Exists(root) || (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) return;
         foreach (string folder in Directory.GetDirectories(root))
         {

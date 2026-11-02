@@ -55,7 +55,7 @@ public static class Program
                 if (args.Length == 2 && args[0] == "--self-update-ready")
                 {
                     string ready = Path.GetFullPath(args[1]);
-                    string updates = Path.GetFullPath(DataPath("SelfUpdate")) + Path.DirectorySeparatorChar;
+                    string updates = Path.GetFullPath(SelfUpdateService.CacheRoot) + Path.DirectorySeparatorChar;
                     if (ready.StartsWith(updates, StringComparison.OrdinalIgnoreCase) && Path.GetFileName(ready) == "ready" && Directory.Exists(Path.GetDirectoryName(ready))) File.WriteAllText(ready, "0.2.0-beta");
                 }
                 app.Dispatcher.BeginInvoke(new Action(async () => await controller.StartAsync()));
