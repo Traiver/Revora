@@ -17,7 +17,7 @@ The self-contained executable is `artifacts/publish/Revora.exe`. Distribute it w
 artifacts/publish/Revora.exe --self-test --report TESTREPORT.json
 ```
 
-Use a writable temporary report path if Windows protects your working directory. The self-test uses simulated WinGet, temporary settings and startup links; it never installs programs or changes the real Windows startup folder. Exit code 0 means success. The optional `--scan-test --report SCANREPORT.json` runs a real read-only inventory scan and reports counts, not the program list.
+The native EXE requires administrator privileges. For local logic checks without elevation, build first and run `dotnet src/Revora/bin/x64/Release/net8.0-windows/win-x64/Revora.dll --self-test --report TESTREPORT.json`. The tests verify the embedded administrator manifest and use an unconfirmed worker fixture. Use a writable temporary report path if Windows protects your working directory. The self-test uses simulated WinGet, temporary settings and startup links and in-memory scheduled-task fixtures; it never installs programs or registers real startup tasks. Exit code 0 means success. The optional `--scan-test --report SCANREPORT.json` runs a real read-only inventory scan and reports counts, not the program list.
 
 ## Changes
 
@@ -34,4 +34,4 @@ Please preserve:
 
 Add meaningful regression cases to SelfTests for behavior that could affect installed software. Test actual installers only in a disposable VM. Remove private download tokens, local paths and program lists from reports before sharing them.
 
-Commit source files only. Executables, runtime licenses copied during publishing, build output, logs and personal settings stay outside Git. Historical identifiers in `LegacyCompatibility.cs` intentionally preserve existing profiles and startup links.
+Commit source files only. Executables, runtime licenses copied during publishing, build output, logs and personal settings stay outside Git. Historical identifiers in `LegacyCompatibility.cs` intentionally preserve existing profiles and startup links. The opt-in background startup uses a per-user Task Scheduler logon task with the highest available privileges and an interactive token. It never stores a password or runs as SYSTEM. Existing owned startup links are removed only after the task is registered and verified. Disabled or foreign entries remain protected.

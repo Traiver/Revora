@@ -13,7 +13,7 @@ Revora checks installed programs for updates. You choose what to update; downloa
 - Optionally start with Windows in the background and notify you about updates.
 - Turn off update reminders for individual programs.
 
-**Get started:** Open `Revora.exe`. Microsoft App Installer with WinGet is required to find installed programs and updates.
+**Get started:** Open `Revora.exe` and approve the Windows administrator prompt. Microsoft App Installer with WinGet is required to find installed programs and updates.
 
 Build instructions and contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
 
