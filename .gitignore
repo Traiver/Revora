@@ -1,0 +1,45 @@
+# Generated build and release files
+**/bin/
+**/obj/
+.vs/
+.idea/
+artifacts/
+publish/
+*.exe
+*.dll
+*.msi
+*.msix
+*.appx
+*.pdb
+*.zip
+*.7z
+/licenses/
+
+# Local settings, reports and temporary files
+*.user
+*.suo
+*.log
+*.tmp
+*.cache
+/native-*.json
+/TESTREPORT.json
+/SCANREPORT.json
+**/quellen.json*
+**/hinweise.json*
+**/Downloads/
+**/Jobs/
+.env
+.env.*
+*.pfx
+*.p12
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# This repository contains native C# only
+*.ps1
+*.psm1
+*.cmd
+*.bat
