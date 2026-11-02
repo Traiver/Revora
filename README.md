@@ -14,7 +14,7 @@ Revora checks installed programs for updates. You choose what to update; downloa
 - Turn off update reminders for individual programs.
 - Steam games are excluded.
 
-**Get started:** Open `Revora.exe`. Microsoft App Installer with WinGet is required to find installed programs and updates. The self-contained EXE includes the .NET runtime. Include the `licenses` folder when distributing it.
+**Get started:** Open `Revora.exe`. Microsoft App Installer with WinGet is required to find installed programs and updates.
 
 Build instructions and contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
 
