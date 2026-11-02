@@ -1,8 +1,12 @@
 # Revora
 
-**0.1.0 Beta** · Update manager for Windows 10/11 (x64).
+**Beta** · Update manager for Windows 10/11 (x64).
 
 Revora checks installed programs for updates. You choose what to update; downloads and installations start only after your confirmation.
+
+![Revora application](docs/images/revora.png)
+
+*Example view with sample programs.*
 
 - Scan automatically on launch and select individual updates.
 - Add or change custom download sources.
