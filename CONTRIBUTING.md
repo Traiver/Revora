@@ -27,7 +27,6 @@ Please preserve:
 - Explicit consent before package/source agreements, downloads, execution and installer migrations.
 - No shell command composition from package IDs, URLs or filenames. Use `ProcessStartInfo.ArgumentList`.
 - No PowerShell, batch or command script files and no runtime script-shell invocations.
-- Steam-managed title filtering; preserve the Steam client itself.
 - Configuration compatibility and atomic saves with backups.
 - User choice for multiple versions, downloads and folders.
 - Silent background scans, deduplicated notifications and per-program reminder settings.
