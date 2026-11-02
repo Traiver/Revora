@@ -1,0 +1,45 @@
+name: Windows x64
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Reject script files
+        run: |
+          if git ls-files | grep -Ei '\.(ps1|psm1|cmd|bat)$'; then
+            echo 'Script files are not allowed in this repository.'
+            exit 1
+          fi
+      - name: Build x64
+        run: dotnet build Revora.sln -c Release -p:Platform=x64 --nologo
+      - name: Publish self-contained x64 EXE
+        run: dotnet publish src/Revora/Revora.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o artifacts/publish --nologo
+      - name: Test published EXE
+        run: ./artifacts/publish/Revora.exe --self-test --report "$RUNNER_TEMP/Revora-tests.json"
+      - name: Include documentation
+        run: cp LICENSE README.md THIRD-PARTY-NOTICES.md artifacts/publish/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: Revora-0.1.0-beta-win-x64
+          path: artifacts/publish/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: self-test-report
+          path: ${{ runner.temp }}/Revora-tests.json
+          if-no-files-found: warn
