@@ -40,6 +40,9 @@ public static class Program
                 File.WriteAllText(path, Json.Write(new { Programs = result.Programs.Count, Folders = result.Programs.Count(x => x.Installations.Any(i => i.Path.Length > 0)), Multiple = result.Programs.Count(x => x.InstallationsNotice.Length > 0), Selected = result.Programs.Count(x => x.Selected), result.Error }));
                 return result.Error.Length == 0 ? 0 : 1;
             }
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            if (!new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
+                throw new UserMessageException("Revora benötigt Administratorrechte. Öffne Revora.exe und bestätige die Windows-Abfrage, um fortzufahren.");
             using var mutex = new Mutex(false, LegacyCompatibility.InstanceMutexName);
             if (!mutex.WaitOne(0)) { if (!background) MessageBox.Show("Der Updater ist bereits geöffnet. Klicke auf sein Symbol in der Taskleiste. Wenn er im Hintergrund läuft, öffnest du ihn über das kleine Symbol neben der Windows-Uhr.", "Revora"); return 0; }
             try

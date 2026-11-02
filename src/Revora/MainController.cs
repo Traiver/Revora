@@ -123,7 +123,7 @@ public sealed partial class MainController : IDisposable
     private void UpdateStartup()
     {
         tray.Visible = startupEnabled;
-        Window.C<TextBlock>("StartupHint").Text = startupEnabled ? "Startet beim Anmelden im Hintergrund und meldet neue Updates." : "Ausgeschaltet. Revora startet nur, wenn du es öffnest.";
+        Window.C<TextBlock>("StartupHint").Text = startupEnabled ? "Startet beim Anmelden mit Administratorrechten im Hintergrund und meldet neue Updates." : "Ausgeschaltet. Revora startet nur, wenn du es öffnest.";
         Window.C<TextBlock>("FooterText").Text = startupEnabled ? "Schließen lässt Revora im Hintergrund weiterlaufen. Die Suche erfolgt alle 4 Stunden. Beenden: Rechtsklick auf das Symbol neben der Uhr → Beenden." : "Schließen beendet Revora. Solange das Fenster offen ist, wird nach der ersten Suche alle 4 Stunden erneut geprüft.";
     }
     private void UpdateActions()

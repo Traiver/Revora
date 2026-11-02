@@ -30,6 +30,33 @@ public static class SelfTests
         public Func<HttpRequestMessage, HttpResponseMessage> Respond { get; set; } = _ => new(HttpStatusCode.NotFound);
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) { var response = Respond(request); response.RequestMessage = request; return Task.FromResult(response); }
     }
+    private sealed class FakeStartupTasks : IStartupTaskStore
+    {
+        public string? Xml { get; set; }
+        public bool FailRegistration { get; set; }
+        public int Registrations { get; private set; }
+        public string? ReadXml() => Xml;
+        public void Register(string xml) { if (FailRegistration) throw new IOException("Fixture registration failure"); Xml = xml; Registrations++; }
+        public void Delete() => Xml = null;
+    }
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern IntPtr LoadLibraryEx(string file, IntPtr reserved, uint flags);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] private static extern IntPtr FindResource(IntPtr module, IntPtr name, IntPtr type);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern uint SizeofResource(IntPtr module, IntPtr resource);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern IntPtr LoadResource(IntPtr module, IntPtr resource);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern IntPtr LockResource(IntPtr resource);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")] private static extern bool FreeLibrary(IntPtr module);
+    private static string ReadExecutableManifest(string path)
+    {
+        var module = LoadLibraryEx(path, IntPtr.Zero, 2); Check(module != IntPtr.Zero, "Cannot open EXE resources");
+        try
+        {
+            var resource = FindResource(module, (IntPtr)1, (IntPtr)24); Check(resource != IntPtr.Zero, "EXE manifest missing");
+            var bytes = new byte[SizeofResource(module, resource)];
+            System.Runtime.InteropServices.Marshal.Copy(LockResource(LoadResource(module, resource)), bytes, 0, bytes.Length);
+            return Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF').TrimEnd('\0');
+        }
+        finally { FreeLibrary(module); }
+    }
     private static string Table(params (string Name, string Id, string Installed, string Offered)[] rows)
     {
         var list = new List<string> { string.Format("{0,-30}{1,-30}{2,-14}{3,-14}{4}", "Name", "Id", "Version", "Available", "Source"), new string('-', 100) };
@@ -43,6 +70,10 @@ public static class SelfTests
             foreach (var bad in new[] { "http://example.org/a.exe", "https://user:pass@example.org/a.exe", "file:///C:/a.exe", "invalid" }) Reject(() => Validate.Https(bad), "Unsafe URL accepted");
             foreach (var bad in new[] { "--all", "Vendor App", "Vendor.App;calc", "Vendor.App\"" }) Reject(() => Validate.Package(bad), "Unsafe package accepted");
             Check(Scanner.VersionState("2.0", "1.0") == "Older" && Scanner.VersionState("2.0", "2.0") == "Current" && Scanner.VersionState("", "2.0") == "Unknown" && Scanner.VersionState("1.0", "") == "Manual", "Version comparison failed"); passed.Add("URL/package validation and version states");
+            var manifest = System.Xml.Linq.XDocument.Parse(ReadExecutableManifest(Path.Combine(AppContext.BaseDirectory, "Revora.exe")));
+            var execution = manifest.Descendants().Single(node => node.Name.LocalName == "requestedExecutionLevel");
+            Check((string?)execution.Attribute("level") == "requireAdministrator" && (string?)execution.Attribute("uiAccess") == "false", "Packaged EXE does not request administrator privileges");
+            passed.Add("Native Windows EXE manifest requires administrator approval without UIAccess");
             var store = new SourceStore(Path.Combine(root, "sources.json"));
             File.WriteAllText(store.FilePath, "[{\"Name\":\"Legacy\",\"Url\":\"https://example.org/a.exe\",\"InstalledVersion\":\"1.0\"}]");
             var before = File.ReadAllText(store.FilePath); var sources = store.Load(); Check(sources.Count == 1 && sources[0].Key.StartsWith("manual:") && before == File.ReadAllText(store.FilePath), "Legacy config changed on read");
@@ -86,14 +117,16 @@ public static class SelfTests
             var deniedRunner = new FakeRunner(); var denied = new WorkerService(deniedRunner).ExecuteAsync(new InstallPlan { Mode = "Winget", PackageId = "Vendor.App", Version = "2.0" }, Path.Combine(root,"denied.log.txt")).GetAwaiter().GetResult(); Check(!denied.Success && deniedRunner.Calls.Count == 0, "Unconfirmed worker executed"); passed.Add("Installer migration and agreement gates without real process execution");
             var nativePlan = Path.Combine(root, "native-denied-plan.json"); var nativeResult = Path.Combine(root, "native-denied-result.json");
             File.WriteAllText(nativePlan, Json.Write(new InstallPlan { Mode = "Winget", PackageId = "Revora.Tests.NeverInstall.Package", Version = "1.0" }));
-            var nativeStart = new System.Diagnostics.ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "Revora.exe")) { UseShellExecute = false, CreateNoWindow = true };
+            bool managedHost = string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase);
+            var nativeStart = new System.Diagnostics.ProcessStartInfo(managedHost ? Environment.ProcessPath! : Path.Combine(AppContext.BaseDirectory, "Revora.exe")) { UseShellExecute = false, CreateNoWindow = true };
+            if (managedHost) nativeStart.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Revora.dll"));
             foreach (var arg in new[] { "--worker", nativePlan, nativeResult }) nativeStart.ArgumentList.Add(arg);
             using (var native = System.Diagnostics.Process.Start(nativeStart) ?? throw new Exception("Test worker not started"))
             {
                 if (!native.WaitForExit(15000)) { native.Kill(true); throw new Exception("Background worker did not finish"); }
                 Check(native.ExitCode != 0 && File.Exists(nativeResult) && !Json.Read<WorkerResult>(File.ReadAllText(nativeResult)).Success, "Background worker did not safely reject unconfirmed work");
             }
-            passed.Add("Actual windowless EXE worker rejects unconfirmed requests without launching WinGet");
+            passed.Add("Windowless worker rejects unconfirmed requests without launching WinGet");
             var startup = new StartupService(Path.Combine(root, "startup.lnk"), Environment.ProcessPath); Check(!startup.Enabled, "Default startup enabled"); startup.Set(true); Check(startup.State() == "Native", "Native shortcut not recognized"); startup.Set(false); Check(!File.Exists(startup.LinkPath), "Opt-out left link"); passed.Add("Native EXE startup opt-in using isolated shortcut");
             var renamedStartup = new StartupService(Path.Combine(root, "rename-startup.lnk"), Path.Combine(root, "Revora.exe"));
             new StartupService(renamedStartup.LinkPath, Path.Combine(root, LegacyCompatibility.OriginalName + ".exe")).Set(true);
@@ -114,6 +147,26 @@ public static class SelfTests
             Check(!revoraStartup.Enabled && !revoraStartup.MigrateLegacy(), "Foreign old shortcut enabled startup");
             revoraStartup.Set(true); revoraStartup.Set(false); Check(File.Exists(oldStartupPath), "Foreign old shortcut was removed");
             passed.Add("Revora startup filename migration preserves opt-in and leaves foreign legacy shortcuts untouched");
+            var taskSid = System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
+            var taskExe = Path.Combine(root, "apps & tools", "Revora.exe"); var taskLink = Path.Combine(root, "task-startup.lnk");
+            var tasks = new FakeStartupTasks(); var elevatedStartup = new StartupService(taskLink, taskExe, tasks: tasks, sid: taskSid);
+            Check(!elevatedStartup.Enabled && tasks.Registrations == 0 && !elevatedStartup.MigrateLegacy(), "Task startup auto-enabled");
+            new StartupService(taskLink, taskExe).Set(true); Check(elevatedStartup.State() == "Legacy", "Old opted-in shortcut not recognized");
+            tasks.FailRegistration = true; Reject(() => elevatedStartup.MigrateLegacy(), "Task registration failure ignored");
+            Check(File.Exists(taskLink) && elevatedStartup.Enabled, "Failed task migration deleted old opt-in");
+            tasks.FailRegistration = false; Check(elevatedStartup.MigrateLegacy() && tasks.Registrations == 1 && !File.Exists(taskLink) && elevatedStartup.State() == "Native", "Elevated task migration failed");
+            Check(StartupTaskDefinition.State(tasks.Xml!, taskExe, taskSid) == "Native" && tasks.Xml!.Contains("HighestAvailable") && tasks.Xml.Contains("InteractiveToken") && !tasks.Xml.Contains("<Password>"), "Elevated task does not preserve interactive user without stored password");
+            string ownTask = tasks.Xml!;
+            dynamic scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service")!)!; scheduler.Connect();
+            dynamic nativeDefinition = scheduler.NewTask(0); nativeDefinition.XmlText = ownTask;
+            Check(StartupTaskDefinition.State((string)nativeDefinition.XmlText, taskExe, taskSid) == "Native", "Windows rejected or changed the startup task definition");
+            tasks.Xml = ownTask.Replace("<Enabled>true</Enabled>", "<Enabled>false</Enabled>");
+            Check(!elevatedStartup.Enabled && !elevatedStartup.MigrateLegacy(), "Disabled task was re-enabled automatically");
+            elevatedStartup.Set(true); elevatedStartup.Set(false); Check(tasks.Xml == null && !elevatedStartup.Enabled, "Task opt-out left automatic startup enabled");
+            tasks.Xml = ownTask.Replace("--background", "--other-action");
+            Reject(() => elevatedStartup.Set(true), "Foreign scheduled task overwritten"); Reject(() => elevatedStartup.Set(false), "Foreign scheduled task deleted");
+            Check(tasks.Xml.Contains("--other-action"), "Foreign task changed"); tasks.Xml = null;
+            passed.Add("Elevated interactive startup task preserves opt-in, migrates atomically, respects opt-out and protects foreign tasks");
             var main = Ui.Load("MainWindow.xaml"); Check(main.Icon != null && main.Title == "Revora · 0.1.0 Beta", "Revora branding missing"); var list = main.C<ListBox>("ProgramsList"); Check(list.Items.Count == 0 && main.C<Border>("ProgramsCard").Visibility == Visibility.Collapsed && main.C<CheckBox>("StartupOption").IsChecked != true, "UI not scan-first/opt-in");
             main.C<Border>("ProgramsCard").Visibility = Visibility.Visible; list.ItemsSource = scan.Programs; int clicks = 0; string key = "";
             Ui.RouteRowButtons(main, button => { clicks++; key = Convert.ToString(button.Tag) ?? ""; });

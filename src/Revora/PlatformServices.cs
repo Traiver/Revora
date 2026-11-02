@@ -147,11 +147,15 @@ public sealed class StartupService
     public string LinkPath { get; }
     public string ExePath { get; }
     private readonly string[] legacyLinks;
-    public StartupService(string? link = null, string? exe = null, string? startupFolder = null)
+    private readonly IStartupTaskStore? taskStore;
+    private readonly string userSid;
+    public StartupService(string? link = null, string? exe = null, string? startupFolder = null, IStartupTaskStore? tasks = null, string? sid = null)
     {
         var folder = startupFolder ?? Environment.GetFolderPath(Environment.SpecialFolder.Startup);
         LinkPath = link ?? Path.Combine(folder, "Revora.lnk"); ExePath = exe ?? Environment.ProcessPath!;
         legacyLinks = link == null ? LegacyCompatibility.StartupLinkNames.Select(name => Path.Combine(folder, name)).ToArray() : Array.Empty<string>();
+        userSid = sid ?? System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
+        taskStore = tasks ?? (link == null && startupFolder == null ? new WindowsStartupTaskStore(userSid) : null);
     }
     private dynamic Link(string path) { var type = Type.GetTypeFromProgID("WScript.Shell") ?? throw new InvalidOperationException("Windows kann den automatischen Start gerade nicht einrichten. Bitte versuche es nach einem Neustart erneut."); dynamic shell = Activator.CreateInstance(type)!; return shell.CreateShortcut(path); }
     private string StateOf(string path)
@@ -163,11 +167,33 @@ public sealed class StartupService
         return "Foreign";
     }
     private string[] OwnedLegacyLinks() => legacyLinks.Where(path => StateOf(path) is "Native" or "Legacy").ToArray();
-    public string State() => File.Exists(LinkPath) ? StateOf(LinkPath) : OwnedLegacyLinks().Length > 0 ? "Legacy" : "Disabled";
+    public string State()
+    {
+        var taskXml = taskStore?.ReadXml();
+        if (taskXml != null) return StartupTaskDefinition.State(taskXml, ExePath, userSid);
+        var linkState = File.Exists(LinkPath) ? StateOf(LinkPath) : OwnedLegacyLinks().Length > 0 ? "Legacy" : "Disabled";
+        return taskStore != null && linkState == "Native" ? "Legacy" : linkState;
+    }
     public void Set(bool enabled)
     {
         if (State() == "Foreign") throw new UserMessageException("Es gibt bereits einen anderen Eintrag mit diesem Namen für den Windows-Start. Er bleibt unverändert. Die Einstellung konnte deshalb nicht gespeichert werden.");
         var oldLinks = OwnedLegacyLinks();
+        if (taskStore != null)
+        {
+            if (enabled)
+            {
+                taskStore.Register(StartupTaskDefinition.Create(ExePath, userSid));
+                if (State() != "Native") throw new UserMessageException("Der automatische Start mit Administratorrechten konnte nicht gespeichert werden. Bitte versuche es erneut.");
+            }
+            else if (taskStore.ReadXml() != null)
+            {
+                taskStore.Delete();
+                if (taskStore.ReadXml() != null) throw new UserMessageException("Der automatische Start konnte nicht ausgeschaltet werden. Bitte versuche es erneut.");
+            }
+            if (StateOf(LinkPath) is "Native" or "Legacy") File.Delete(LinkPath);
+            foreach (var oldLink in oldLinks) File.Delete(oldLink);
+            return;
+        }
         if (!enabled) { if (File.Exists(LinkPath)) File.Delete(LinkPath); foreach (var oldLink in oldLinks) File.Delete(oldLink); return; }
         dynamic link = Link(LinkPath); link.TargetPath = ExePath; link.Arguments = "--background"; link.WorkingDirectory = Path.GetDirectoryName(ExePath); link.Save();
         if (StateOf(LinkPath) != "Native") throw new UserMessageException("Der Start mit Windows konnte nicht gespeichert werden. Bitte versuche es erneut.");
