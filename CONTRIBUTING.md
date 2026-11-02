@@ -1,5 +1,11 @@
 # Contributing
 
+## Releases and self-updates
+
+Publish releases in `Traiver/Revora` with tags such as `v0.2.0-beta` and a self-contained Windows ZIP named `Revora-0.2.0-beta-win-x64.zip`. Keep `Revora.exe` at the ZIP root and include the three runtime notices under `licenses/`. GitHub supplies the asset's SHA256 digest. Update `SelfUpdateService.CurrentTag`, version metadata, UI labels and the workflow artifact name together. Beta builds also check published beta releases; drafts, older versions, other assets and downloads without a digest are ignored.
+
+Revora checks its own releases automatically and asks before downloading, replacing its EXE and restarting. Settings and source files are preserved. `Revora.exe.previous` keeps the last EXE; a failed startup restores it automatically. Update helpers use native C# and inherited administrator privileges. No credentials are stored. If a download is unavailable or the application cannot be replaced, the installed version remains usable. The first upgrade from a version without this feature requires downloading the new release manually.
+
 ## Build
 
 Windows x64, Visual Studio 2022 with .NET desktop development, and .NET SDK 8.0.414 or later within .NET 8 are required. `global.json` excludes preview SDKs. Open `Revora.sln` and select **Release / x64**, or run from the repository root:

@@ -12,6 +12,7 @@ Revora checks installed programs for updates. You choose what to update; downloa
 - Add or change custom download sources.
 - Optionally start with Windows in the background and notify you about updates.
 - Turn off update reminders for individual programs.
+- Find and install new Revora versions from GitHub without signing in.
 
 **Get started:** Open `Revora.exe` and approve the Windows administrator prompt. Microsoft App Installer with WinGet is required to find installed programs and updates.
 
